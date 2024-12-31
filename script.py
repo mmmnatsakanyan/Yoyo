@@ -45,6 +45,14 @@ def webhook():
         response = requests.post(YOAI_SEND_MESSAGE_URL, headers=headers, data=payload, files=files)
         return jsonify(response.json())
     return 'OK'
+    import logging
+logging.basicConfig(level=logging.DEBUG)
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    logging.debug(f'Получен запрос: {request.json}')
+    return 'OK', 200
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
