@@ -1,59 +1,78 @@
-from flask import Flask, request, jsonify
-import yt_dlp
-import requests
-import txt
+from flask import Flask, request, jsonify, send_file
 import os
-app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-app.route('/')
-def home():
-    return 'Сервер работает!'
-
-
+import yt_dlp
+import logging
 
 app = Flask(__name__)
 
-YOAI_API_KEY = 'ваш_api_ключ'
-YOAI_SEND_MESSAGE_URL = 'https://yoai.yophone.com/api/pub/sendMessage'
-
-def download_audio(url):
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': 'audio.%(ext)s',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-    return 'audio.mp3'
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.json
-    message = data.get('message', '')
-    chat_id = data.get('chat', {}).get('id', '')
-    print(data)  # Логируем данные для проверки
-    return 'Webhook received', 200
-
-    if 'youtube.com' in message or 'youtu.be' in message:
-        mp3_file = download_audio(message)
-        files = {'file': open(mp3_file, 'rb')}
-        headers = {'X-YoAI-API-Key': YOAI_API_KEY}
-        payload = {'chat_id': chat_id, 'caption': 'Ваш MP3 файл'}
-        response = requests.post(YOAI_SEND_MESSAGE_URL, headers=headers, data=payload, files=files)
-        return jsonify(response.json())
-    return 'OK'
-    import logging
+# Установим логирование
 logging.basicConfig(level=logging.DEBUG)
 
+# Корневой маршрут для проверки работы сервера
+@app.route('/')
+def home():
+    return 'Сервер работает! Бот готов к работе.', 200
+
+# Основной маршрут для обработки вебхуков
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    logging.debug(f'Получен запрос: {request.json}')
-    return 'OK', 200
+    try:
+        # Проверяем, что запрос содержит данные
+        data = request.json
+        if not data or 'message' not in data:
+            logging.debug('Пустые данные или отсутствует "message".')
+            return jsonify({'error': 'Invalid data'}), 400
 
+        # Извлекаем ссылку из сообщения
+        youtube_url = data['message'].get('text')
+        if not youtube_url or 'youtube.com' not in youtube_url and 'youtu.be' not in youtube_url:
+            logging.debug(f'Неверная ссылка: {youtube_url}')
+            return jsonify({'error': 'No valid YouTube URL provided'}), 400
 
+        # Загружаем MP3 файл
+        logging.debug(f'Загружаем MP3 из ссылки: {youtube_url}')
+        mp3_file = download_youtube_audio(youtube_url)
+        if not mp3_file:
+            logging.error('Не удалось загрузить MP3 файл.')
+            return jsonify({'error': 'Failed to download audio'}), 500
+
+        # Отправляем MP3 файл в ответ
+        logging.debug(f'Успешно загрузили MP3: {mp3_file}')
+        return send_file(mp3_file, as_attachment=True, mimetype='audio/mpeg', download_name='audio.mp3')
+
+    except Exception as e:
+        logging.exception('Ошибка при обработке вебхука:')
+        return jsonify({'error': 'Internal server error'}), 500
+
+# Функция для загрузки MP3 с YouTube
+def download_youtube_audio(url):
+    try:
+        # Папка для временного хранения файлов
+        output_dir = 'downloads'
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Настройки загрузки
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': f'{output_dir}/%(title)s.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info_dict).replace('.webm', '.mp3').replace('.m4a', '.mp3')
+            logging.debug(f'Скачанный файл: {filename}')
+            return filename
+
+    except Exception as e:
+        logging.exception('Ошибка при загрузке аудио:')
+        return None
+
+# Запуск приложения
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-
