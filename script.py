@@ -34,6 +34,8 @@ def webhook():
     data = request.json
     message = data.get('message', '')
     chat_id = data.get('chat', {}).get('id', '')
+    print(data)  # Логируем данные для проверки
+    return 'Webhook received', 200
 
     if 'youtube.com' in message or 'youtu.be' in message:
         mp3_file = download_audio(message)
