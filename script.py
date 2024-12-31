@@ -4,6 +4,10 @@ import requests
 import txt
 import os
 app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+app.route('/')
+def home():
+    return 'Сервер работает!'
+
 
 
 app = Flask(__name__)
